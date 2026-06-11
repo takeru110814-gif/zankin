@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZANKIN - あといくら使える？</title>
+<!-- 検索エンジンやSNSシェア用の説明文 -->
+<meta name="description" content="ZANKIN（ザンキン）— 今月あといくら自由に使えるかを即答する家計管理アプリ。現金・QR決済・カードの残高をまとめて管理。飲み会に行けるかすぐ分かる。">
+<meta property="og:title" content="ZANKIN - あといくら使える？">
+<meta property="og:description" content="今月あといくら自由に使えるかを即答。突発の飲み会に耐えられるかすぐ分かる家計管理アプリ。">
+<meta property="og:type" content="website">
+<!-- アイコンとPWA（ホーム画面に追加でアプリとして起動できる） -->
+<meta name="theme-color" content="#eef1f8">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ZANKIN">
+<style>
+  :root {
+    --bg: #0b0d14;
+    /* ガラス風: カードは半透明の白 + 背景ぼかし（backdrop-filter）で表現 */
+    --card: rgba(255, 255, 255, 0.06);
+    --card2: rgba(255, 255, 255, 0.09);
+    --text: #f0f2f8;
+    --sub: #9aa1b8;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --border: rgba(255, 255, 255, 0.12);
+    --cash: #34d399;
+    --qr: #60a5fa;
+    --card-pay: #f472b6;
+    /* テーマで変わる部品色 */
+    --press: rgba(255, 255, 255, 0.18);      /* ボタンを押したときの色 */
+    --shadow: rgba(0, 0, 0, 0.3);            /* カードの影 */
+    --tabbar-bg: rgba(15, 17, 26, 0.65);     /* 下部タブバー */
+    --hole-bg: rgba(11, 13, 20, 0.72);       /* 円グラフ中央の穴 */
+    --op-bg: rgba(139, 92, 246, 0.16);       /* 電卓の演算キー背景 */
+    --op-color: #a78bfa;                     /* 電卓の演算キー文字 */
+    --blob1: rgba(99, 102, 241, 0.28);       /* 背景の光のにじみ3色 */
+    --blob2: rgba(244, 114, 182, 0.14);
+    --blob3: rgba(139, 92, 246, 0.22);
+  }
+  /* ライトテーマ: body に .light クラスが付くと全体が切り替わる */
+  body.light {
+    --bg: #eef1f8;
+    --card: rgba(255, 255, 255, 0.62);
+    --card2: rgba(20, 28, 48, 0.06);
+    --text: #1a2033;
+    --sub: #5b6377;
+    --border: rgba(20, 28, 48, 0.12);
+    --press: rgba(20, 28, 48, 0.12);
+    --shadow: rgba(80, 95, 150, 0.16);
+    --tabbar-bg: rgba(255, 255, 255, 0.65);
+    --hole-bg: rgba(255, 255, 255, 0.75);
+    --op-bg: rgba(124, 58, 237, 0.10);
+    --op-color: #7c3aed;
+    --blob1: rgba(99, 102, 241, 0.20);
+    --blob2: rgba(244, 114, 182, 0.16);
+    --blob3: rgba(139, 92, 246, 0.16);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 96px; /* 下部タブバーに隠れないよう余白を確保 */
+  }
+  /* 背景に色のにじみ（光のボケ）を置いて、ガラスカードのぼかしを引き立てる */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(600px 420px at 15% -5%, var(--blob1), transparent 70%),
+      radial-gradient(500px 400px at 100% 25%, var(--blob2), transparent 70%),
+      radial-gradient(650px 500px at 40% 110%, var(--blob3), transparent 70%);
+  }
+  h1 {
+    font-size: 16px; text-align: center; padding: 8px 0 16px;
+    letter-spacing: 4px; font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 14px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px); /* iOS Safari 用 */
+    box-shadow: 0 8px 32px var(--shadow);
+  }
+  input::placeholder { color: var(--sub); opacity: 0.7; }
+  .card h2 { font-size: 12px; color: var(--sub); letter-spacing: 1px; margin-bottom: 12px; font-weight: 600; }
+
+  /* ===== 総残額 ===== */
+  .total-label { font-size: 12px; color: var(--sub); text-align: center; letter-spacing: 1px; }
+  .total-amount { font-size: 46px; font-weight: 800; text-align: center; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .total-amount.ok { color: var(--ok); }
+  .total-amount.warn { color: var(--warn); }
+  .total-amount.danger { color: var(--danger); }
+  .total-sub { font-size: 12px; color: var(--sub); text-align: center; }
+  .per-day { text-align: center; margin-top: 8px; font-size: 13px; color: var(--text); }
+  .per-day b { color: var(--ok); }
+
+  /* ===== 方法別ゲージ ===== */
+  .method-row { margin-bottom: 14px; }
+  .method-row:last-child { margin-bottom: 0; }
+  .method-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .method-name { font-weight: 700; }
+  .method-nums { font-variant-numeric: tabular-nums; color: var(--sub); }
+  .method-nums b { color: var(--text); font-size: 14px; }
+  .gauge { height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .gauge-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+
+  /* ===== シミュレーター ===== */
+  .sim-card {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.16), rgba(139, 92, 246, 0.12));
+    border: 1px solid rgba(139, 92, 246, 0.35);
+  }
+  .sim-input {
+    width: 100%; font-size: 20px; padding: 12px; text-align: center;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .sim-input:focus { outline: none; border-color: var(--accent); }
+  .sim-result { margin-top: 10px; font-size: 14px; min-height: 20px; text-align: center; }
+
+  /* ===== 入力（電卓） ===== */
+  .display {
+    width: 100%; font-size: 30px; font-weight: 700; padding: 14px; text-align: right;
+    background: var(--card2); border: 1px solid var(--border); border-radius: 14px;
+    min-height: 64px; font-variant-numeric: tabular-nums; word-break: break-all;
+  }
+  .display .expr { font-size: 13px; color: var(--sub); display: block; min-height: 16px; text-align: right; font-weight: 400; }
+  .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  .key {
+    padding: 16px 0; font-size: 20px; font-weight: 600; border: none; border-radius: 12px;
+    background: var(--card2); color: var(--text); cursor: pointer;
+  }
+  .key:active { background: var(--press); }
+  .key.op { background: var(--op-bg); color: var(--op-color); }
+  .key.fn { background: var(--op-bg); color: var(--warn); font-size: 15px; }
+  .pay-methods { display: flex; gap: 8px; margin-top: 14px; }
+  .pay-btn {
+    flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 600;
+    border: 2px solid var(--border); background: var(--card2); color: var(--sub);
+    border-radius: 12px; cursor: pointer;
+  }
+  .pay-btn.selected[data-method="現金"] { border-color: var(--cash); color: var(--cash); }
+  .pay-btn.selected[data-method="QR決済"] { border-color: var(--qr); color: var(--qr); }
+  .pay-btn.selected[data-method="カード"] { border-color: var(--card-pay); color: var(--card-pay); }
+  .type-toggle { display: flex; gap: 8px; margin-top: 10px; }
+  .type-btn {
+    flex: 1; padding: 10px; font-size: 13px; font-weight: 600; border-radius: 12px;
+    border: 2px solid var(--border); background: var(--card2); color: var(--sub); cursor: pointer;
+  }
+  .type-btn.selected.expense { border-color: var(--danger); color: var(--danger); }
+  .type-btn.selected.income { border-color: var(--ok); color: var(--ok); }
+  .memo-input {
+    width: 100%; margin-top: 10px; padding: 12px; font-size: 14px;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .add-btn {
+    width: 100%; margin-top: 12px; padding: 16px; font-size: 16px; font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    color: white; border: none; border-radius: 14px; cursor: pointer;
+    box-shadow: 0 4px 24px rgba(99, 102, 241, 0.45); /* ボタンが光って見えるグロー */
+  }
+  .add-btn:active { opacity: 0.8; }
+
+  /* ===== 割り勘 ===== */
+  .split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .split-grid input {
+    width: 100%; padding: 12px; font-size: 16px; text-align: center;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .split-grid input:focus { outline: none; border-color: var(--accent); }
+  .split-result { margin-top: 10px; font-size: 14px; text-align: center; color: var(--sub); min-height: 20px; }
+  .split-result b { color: var(--text); font-size: 16px; }
+  .split-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .split-btn {
+    flex: 1; padding: 12px 4px; font-size: 13px; font-weight: 600;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
+  }
+  .split-btn:active { background: var(--press); }
+  .split-note { margin-top: 8px; font-size: 12px; color: var(--sub); text-align: center; }
+
+  /* ===== 履歴 ===== */
+  .history-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 14px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-left { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .history-texts { display: flex; flex-direction: column; gap: 2px; }
+  .history-memo { color: var(--text); }
+  .history-meta { font-size: 11px; color: var(--sub); }
+  .history-right { display: flex; align-items: center; gap: 8px; }
+  .history-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .history-amount.income { color: var(--ok); }
+  .del-btn { background: none; border: none; color: var(--sub); cursor: pointer; font-size: 15px; padding: 4px; }
+  .empty-msg { color: var(--sub); font-size: 13px; text-align: center; padding: 12px 0; }
+
+  /* ===== 設定 ===== */
+  .budget-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; }
+  .budget-grid label { font-size: 13px; font-weight: 600; width: 72px; }
+  /* ===== 円グラフ ===== */
+  .donut-wrap { display: flex; align-items: center; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .donut {
+    width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; position: relative;
+  }
+  .donut::after {
+    /* 中央の穴もすりガラスにして、円グラフの色が透けて見えるようにする */
+    content: ""; position: absolute; width: 72px; height: 72px;
+    background: var(--hole-bg); border-radius: 50%;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .donut-center { position: relative; z-index: 1; text-align: center; }
+  .donut-center .num { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .donut-center .lbl { font-size: 9px; color: var(--sub); }
+  .donut-legend { flex: 1; font-size: 12px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .legend-row:last-child { margin-bottom: 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .legend-name { color: var(--sub); flex: 1; }
+  .legend-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .legend-pct { color: var(--sub); width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .budget-grid input {
+    width: 100%; padding: 11px; font-size: 16px; text-align: right;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  .budget-grid input:focus { outline: none; border-color: var(--accent); }
+  .save-btn {
+    width: 100%; margin-top: 12px; padding: 13px; font-size: 14px; font-weight: 700;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--accent); border-radius: 12px; cursor: pointer;
+  }
+  .save-btn:active { background: var(--press); }
+  /* ===== ページ切り替え（タブ） ===== */
+  .view { display: none; }
+  .view.active { display: block; }
+  .tabbar {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 480px; display: flex;
+    background: var(--tabbar-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border); z-index: 5;
+  }
+  .tab-btn {
+    flex: 1; padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+    background: none; border: none; color: var(--sub);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .tab-btn .tab-icon { display: block; font-size: 20px; margin-bottom: 2px; }
+  .tab-btn.active { color: var(--accent2); }
+
+  /* ===== 初回ガイド ===== */
+  .guide-card { border-color: var(--accent); }
+  .guide-text { font-size: 14px; line-height: 1.7; margin-bottom: 4px; }
+
+  /* ===== テーマ・言語切り替え ===== */
+  .theme-toggle { display: flex; gap: 8px; }
+  .theme-btn, .lang-btn {
+    flex: 1; padding: 12px; font-size: 13px; font-weight: 600; border-radius: 12px;
+    border: 2px solid var(--border); background: var(--card2); color: var(--sub); cursor: pointer;
+  }
+  .theme-btn.selected, .lang-btn.selected { border-color: var(--accent); color: var(--text); }
+
+  /* ===== プロフィール等の入力欄 ===== */
+  .field-label { display: block; font-size: 12px; font-weight: 600; color: var(--sub); margin: 14px 0 0; }
+  textarea.memo-input { resize: vertical; min-height: 90px; font-family: inherit; font-size: 12px; }
+  select.memo-input { width: 100%; }
+  /* OSの日付ピッカーやセレクトの配色をテーマに合わせる */
+  input[type="date"], select.memo-input { color-scheme: dark; }
+  body.light input[type="date"], body.light select.memo-input { color-scheme: light; }
+  .danger-btn { border-color: var(--danger); color: var(--danger); }
+
+  /* ===== あいさつ ===== */
+  .greeting { font-size: 13px; font-weight: 600; color: var(--sub); text-align: center; margin: -6px 0 10px; }
+
+  /* ===== 設定メニュー ===== */
+  .menu-card { padding: 4px 0; }
+  .menu-item {
+    width: 100%; display: flex; justify-content: space-between; align-items: center;
+    padding: 17px 20px; background: none; border: none; cursor: pointer;
+    color: var(--text); font-size: 14px; font-weight: 600; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-right { display: flex; align-items: center; gap: 8px; }
+  .menu-value { color: var(--sub); font-weight: 400; font-size: 13px; }
+  .chevron { color: var(--sub); font-size: 16px; }
+  .back-btn {
+    background: none; border: none; color: var(--accent2); font-size: 14px; font-weight: 600;
+    cursor: pointer; padding: 0 0 14px; display: block;
+  }
+  .field-label { display: block; font-size: 12px; font-weight: 600; color: var(--sub); margin: 14px 2px 0; }
+  /* 日付選択などのフォーム部品の配色をテーマに合わせる */
+  body { color-scheme: dark; }
+  body.light { color-scheme: light; }
+  select.memo-input { width: 100%; }
+  input[type="date"].memo-input { width: 100%; }
+  .save-btn.danger { border-color: var(--danger); color: var(--danger); }
+
+  /* ===== 初期設定ウィザード ===== */
+  .setup-overlay {
+    position: fixed; inset: 0; z-index: 20; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .setup-overlay::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(600px 420px at 15% -5%, var(--blob1), transparent 70%),
+      radial-gradient(650px 500px at 90% 110%, var(--blob3), transparent 70%);
+  }
+  .setup-card {
+    position: relative; width: 100%; max-width: 400px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+    padding: 28px 24px;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px var(--shadow);
+  }
+  .setup-step { display: none; }
+  .setup-step.active { display: block; }
+  .setup-title { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .setup-desc { font-size: 13px; color: var(--sub); line-height: 1.7; margin-bottom: 14px; }
+  .setup-nav { display: flex; gap: 8px; margin-top: 20px; }
+  .setup-back {
+    flex: 1; padding: 14px; font-size: 14px; font-weight: 600; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--card2); color: var(--sub); cursor: pointer;
+  }
+  .setup-next { flex: 2; margin-top: 0; }
+  .setup-dots { display: flex; gap: 6px; justify-content: center; margin-top: 18px; }
+  .setup-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+  .setup-dots span.on { background: var(--accent); }
+
+  .toast {
+    position: fixed; bottom: 86px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: white; padding: 10px 24px; border-radius: 20px;
+    font-size: 14px; font-weight: 600; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<h1>ZANKIN</h1>
+
+<!-- ===== ホーム画面 ===== -->
+<div class="view active" id="view-home">
+
+<div class="greeting" id="greeting"></div>
+
+<!-- 初回ガイド（予算未設定のときだけ表示） -->
+<div class="card guide-card" id="guide-card" style="display:none">
+  <div class="guide-text" data-i18n="guide.text">💰 「次の給料日まで使っていい上限額」を決めると、あといくら使えるかが分かるようになります。</div>
+  <button class="add-btn" id="guide-btn" data-i18n="guide.btn">予算を設定する</button>
+</div>
+
+<!-- 総残額 -->
+<div class="card">
+  <div class="total-label" id="month-label">今月あと使えるお金</div>
+  <div class="total-amount ok" id="remaining">¥0</div>
+  <div class="total-sub" id="budget-info"></div>
+  <div class="per-day" id="per-day"></div>
+</div>
+
+<!-- 方法別ゲージ -->
+<div class="card">
+  <h2 data-i18n="home.methods">💳 支払い方法別の残高</h2>
+  <div id="method-gauges"></div>
+  <div class="donut-wrap" id="donut-wrap" style="display:none">
+    <div class="donut" id="donut">
+      <div class="donut-center">
+        <div class="num" id="donut-total"></div>
+        <div class="lbl" data-i18n="donut.used">使用済み</div>
+      </div>
+    </div>
+    <div class="donut-legend" id="donut-legend"></div>
+  </div>
+</div>
+
+<!-- シミュレーター -->
+<div class="card sim-card">
+  <h2 data-i18n="home.sim">🍻 もしこれを使ったら？</h2>
+  <input type="text" class="sim-input" id="sim-amount" data-i18n-ph="sim.ph" placeholder="例: 5000" inputmode="numeric">
+  <div class="sim-result" id="sim-result" data-i18n="sim.empty">金額を入れると使った後の残りが分かります</div>
+</div>
+
+<!-- 履歴 -->
+<div class="card">
+  <h2 data-i18n="home.history">📋 履歴（今の期間）</h2>
+  <div id="history-list"><div class="empty-msg" data-i18n="history.empty">まだ記録がありません</div></div>
+</div>
+
+</div><!-- /view-home -->
+
+<!-- ===== 記録画面 ===== -->
+<div class="view" id="view-record">
+
+<!-- 入力（電卓式） -->
+<div class="card">
+  <h2 data-i18n="record.title">✏️ 記録する</h2>
+  <div class="display">
+    <span class="expr" id="expr"></span>
+    <span id="display-value">0</span>
+  </div>
+  <div class="keypad">
+    <button class="key">7</button><button class="key">8</button><button class="key">9</button><button class="key op">÷</button>
+    <button class="key">4</button><button class="key">5</button><button class="key">6</button><button class="key op">×</button>
+    <button class="key">1</button><button class="key">2</button><button class="key">3</button><button class="key op">−</button>
+    <button class="key">00</button><button class="key">0</button><button class="key fn" id="key-back">⌫</button><button class="key op">＋</button>
+    <button class="key fn" id="key-clear">C</button><button class="key op" id="key-eq" style="grid-column: span 3;">＝</button>
+  </div>
+  <div class="type-toggle">
+    <button class="type-btn expense selected" data-type="expense" data-i18n="type.expense">支出（使った）</button>
+    <button class="type-btn income" data-type="income" data-i18n="type.income">受け取り（残高に追加）</button>
+  </div>
+  <div class="pay-methods" id="pay-methods">
+    <button class="pay-btn selected" data-method="現金" data-i18n="pay.現金">💵 現金</button>
+    <button class="pay-btn" data-method="QR決済" data-i18n="pay.QR決済">📱 QR決済</button>
+    <button class="pay-btn" data-method="カード" data-i18n="pay.カード">💳 カード</button>
+  </div>
+  <input type="text" class="memo-input" id="expense-memo" data-i18n-ph="memo.ph" placeholder="メモ（任意）例: 飲み会、立て替え回収">
+  <button class="add-btn" id="add-expense" data-i18n="btn.add">記録する</button>
+</div>
+
+<!-- 割り勘 -->
+<div class="card">
+  <h2 data-i18n="split.title">🤝 割り勘・立て替え</h2>
+  <div class="split-grid">
+    <input type="text" id="split-total" data-i18n-ph="split.totalPh" placeholder="合計金額" inputmode="numeric">
+    <input type="text" id="split-people" data-i18n-ph="split.peoplePh" placeholder="人数" inputmode="numeric">
+  </div>
+  <div class="split-result" id="split-result" data-i18n="split.empty">合計と人数を入れてください</div>
+  <div class="split-btns">
+    <button class="split-btn" id="split-mine" data-i18n="split.mine">自分の分だけ記録</button>
+    <button class="split-btn" id="split-all" data-i18n="split.all">全額立て替えで記録</button>
+  </div>
+  <div class="split-note" data-i18n="split.note">立て替えた分が返ってきたら「受け取り」で記録すると残高に戻ります</div>
+</div>
+
+<!-- 予算設定（記録ページ内） -->
+<div class="card">
+  <h2 data-i18n="budget.title">💰 予算（方法別の限度額）</h2>
+  <div class="budget-grid">
+    <label style="color: var(--cash)" data-i18n="pay.現金">💵 現金</label><input type="text" id="budget-現金" data-i18n-ph="budget.ph1" placeholder="例: 20000" inputmode="numeric">
+    <label style="color: var(--qr)" data-i18n="pay.QR決済">📱 QR決済</label><input type="text" id="budget-QR決済" data-i18n-ph="budget.ph2" placeholder="例: 15000" inputmode="numeric">
+    <label style="color: var(--card-pay)" data-i18n="pay.カード">💳 カード</label><input type="text" id="budget-カード" data-i18n-ph="budget.ph2" placeholder="例: 15000" inputmode="numeric">
+  </div>
+  <button class="save-btn" id="save-budget" data-i18n="btn.saveBudget">予算を保存</button>
+  <div class="split-note" data-i18n="budget.note">給料日が来ると前回の予算を自動で引き継ぎます</div>
+</div>
+
+</div><!-- /view-record -->
+
+<!-- ===== 設定画面（メニュー） ===== -->
+<div class="view" id="view-settings">
+
+<div class="card menu-card">
+  <button class="menu-item" data-go="set-profile"><span data-i18n="menu.profile">👤 プロフィール</span><span class="menu-right"><span class="menu-value" id="menu-name"></span><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-payday"><span data-i18n="menu.payday">📅 給料日</span><span class="menu-right"><span class="menu-value" id="menu-payday"></span><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-theme"><span data-i18n="menu.theme">🎨 テーマ</span><span class="menu-right"><span class="menu-value" id="menu-theme"></span><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-lang"><span data-i18n="menu.lang">🌐 言語</span><span class="menu-right"><span class="menu-value" id="menu-lang"></span><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-currency"><span data-i18n="menu.currency">💱 通貨</span><span class="menu-right"><span class="menu-value" id="menu-currency"></span><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-backup"><span data-i18n="menu.backup">💾 バックアップ</span><span class="menu-right"><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-about"><span data-i18n="menu.about">ℹ️ このアプリについて</span><span class="menu-right"><span class="chevron">›</span></span></button>
+  <button class="menu-item" data-go="set-reset"><span data-i18n="menu.reset">🗑️ データの初期化</span><span class="menu-right"><span class="chevron">›</span></span></button>
+</div>
+
+<div class="card">
+  <h2 data-i18n="data.title">🔒 データについて</h2>
+  <div class="split-note" style="text-align:left; margin-top:0" data-i18n="data.desc">
+    記録はこの端末のブラウザ内にのみ保存されます。サーバーには送信されません。
+    給料日ごとに自動で新しい記録に切り替わります。
+  </div>
+</div>
+
+</div><!-- /view-settings -->
+
+<!-- ===== 設定: プロフィール ===== -->
+<div class="view" id="view-set-profile">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="profile.title">👤 プロフィール</h2>
+  <label class="field-label" data-i18n="profile.name">名前</label>
+  <input type="text" class="memo-input" id="profile-name" data-i18n-ph="profile.namePh" placeholder="例: 残金太郎" style="margin-top:6px">
+  <label class="field-label" data-i18n="profile.birthday">生年月日</label>
+  <input type="date" class="memo-input" id="profile-birthday" style="margin-top:6px">
+  <label class="field-label" data-i18n="profile.job">職業</label>
+  <select class="memo-input" id="profile-job" style="margin-top:6px">
+    <option value="" data-i18n="opt.select">選択してください</option>
+    <option value="highschool" data-i18n="job.highschool">高校生</option>
+    <option value="student" data-i18n="job.student">大学生・専門学生</option>
+    <option value="worker" data-i18n="job.worker">社会人</option>
+    <option value="parttime" data-i18n="job.parttime">フリーター・パート</option>
+    <option value="other" data-i18n="job.other">その他</option>
+  </select>
+  <label class="field-label" data-i18n="profile.gender">性別</label>
+  <select class="memo-input" id="profile-gender" style="margin-top:6px">
+    <option value="" data-i18n="opt.select">選択してください</option>
+    <option value="male" data-i18n="gender.male">男性</option>
+    <option value="female" data-i18n="gender.female">女性</option>
+    <option value="other" data-i18n="gender.other">その他</option>
+    <option value="na" data-i18n="gender.na">回答しない</option>
+  </select>
+  <button class="save-btn" id="save-profile" data-i18n="btn.save">保存</button>
+</div>
+</div>
+
+<!-- ===== 設定: 給料日 ===== -->
+<div class="view" id="view-set-payday">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="payday.title">📅 給料日</h2>
+  <div class="split-note" style="text-align:left; margin-top:0" data-i18n="payday.desc">
+    残高は「給料日から次の給料日まで」の期間で計算します。
+    31日など月によって存在しない日は、その月の末日として扱います。
+  </div>
+  <input type="text" class="memo-input" id="payday-input" data-i18n-ph="payday.ph" placeholder="例: 25" inputmode="numeric">
+  <button class="save-btn" id="save-payday" data-i18n="btn.save">保存</button>
+</div>
+</div>
+
+<!-- ===== 設定: テーマ ===== -->
+<div class="view" id="view-set-theme">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="theme.title">🎨 テーマ</h2>
+  <div class="theme-toggle">
+    <button class="theme-btn selected" data-theme="light" data-i18n="theme.light">☀️ ライト</button>
+    <button class="theme-btn" data-theme="dark" data-i18n="theme.dark">🌙 ダーク</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== 設定: 言語 ===== -->
+<div class="view" id="view-set-lang">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="lang.title">🌐 言語</h2>
+  <div class="theme-toggle">
+    <button class="theme-btn lang-btn selected" data-lang="ja">日本語</button>
+    <button class="theme-btn lang-btn" data-lang="en">English</button>
+  </div>
+</div>
+</div>
+
+<!-- ===== 設定: 通貨 ===== -->
+<div class="view" id="view-set-currency">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="currency.title">💱 通貨</h2>
+  <div class="split-note" style="text-align:left; margin-top:0" data-i18n="currency.desc">
+    金額の前に付く通貨記号を選べます（表示が変わるだけで、金額はそのままです）。
+  </div>
+  <select class="memo-input" id="currency-select" style="margin-top:12px"></select>
+</div>
+</div>
+
+<!-- ===== 設定: バックアップ ===== -->
+<div class="view" id="view-set-backup">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="backup.title">💾 バックアップ</h2>
+  <div class="split-note" style="text-align:left; margin-top:0" data-i18n="backup.desc">
+    データをファイルに書き出して保存できます。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。
+  </div>
+  <button class="save-btn" id="backup-export" data-i18n="backup.export">データを書き出す</button>
+  <div class="split-note" style="text-align:left" data-i18n="backup.importDesc">
+    書き出したファイルを読み込むと、今のデータがその内容に置き換わります。
+  </div>
+  <button class="save-btn" id="backup-import" data-i18n="backup.import">ファイルを読み込む</button>
+  <input type="file" id="backup-file" accept=".json,application/json" style="display:none">
+</div>
+</div>
+
+<!-- ===== 設定: このアプリについて ===== -->
+<div class="view" id="view-set-about">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="about.title">ℹ️ このアプリについて</h2>
+  <div style="text-align:center; padding: 10px 0 6px">
+    <div style="font-size:24px; font-weight:800; letter-spacing:4px; background:linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent;">ZANKIN</div>
+    <div class="menu-value" style="margin-top:4px"><span data-i18n="about.version">バージョン</span> 1.0.0</div>
+  </div>
+  <div class="split-note" style="text-align:left" data-i18n="about.desc">
+    ZANKIN（ザンキン）は「次の給料日まであといくら使えるか」を即答する家計アプリです。記録の細かさより、いま使えるお金がすぐ分かることを大事にしています。データはすべてこの端末の中だけに保存されます。
+  </div>
+</div>
+</div>
+
+<!-- ===== 設定: データの初期化 ===== -->
+<div class="view" id="view-set-reset">
+<div class="card">
+  <button class="back-btn" data-go="settings" data-i18n="back">‹ 設定に戻る</button>
+  <h2 data-i18n="reset.title">🗑️ データの初期化</h2>
+  <div class="split-note" style="text-align:left; margin-top:0" data-i18n="reset.desc">
+    予算・記録・プロフィールなど、このアプリのすべてのデータを削除して最初からやり直します。この操作は元に戻せません。
+  </div>
+  <button class="save-btn danger" id="reset-data" data-i18n="reset.btn">全データを削除</button>
+</div>
+</div>
+
+<!-- ===== 初期設定ウィザード（初回起動時のみ） ===== -->
+<div class="setup-overlay" id="setup-overlay" style="display:none">
+  <div class="setup-card">
+    <div class="setup-step active" data-step="0">
+      <div class="setup-title" data-i18n="wizard.t0">ようこそ ZANKIN へ 👋</div>
+      <div class="setup-desc" data-i18n="wizard.d0">「次の給料日まであといくら使えるか」を即答する家計アプリです。まず、あなたの名前を教えてください（ニックネームでOK・あとで変更できます）。</div>
+      <input type="text" class="memo-input" id="setup-name" data-i18n-ph="profile.namePh" placeholder="例: 残金太郎" style="margin-top:0">
+    </div>
+    <div class="setup-step" data-step="1">
+      <div class="setup-title" data-i18n="wizard.t1">給料日はいつ？ 📅</div>
+      <div class="setup-desc" data-i18n="wizard.d1">残高は「給料日から次の給料日まで」の期間で計算します。バイト代や仕送りが入る日でもOK。31日など存在しない月では末日扱いになります。</div>
+      <input type="text" class="memo-input" id="setup-payday" data-i18n-ph="payday.ph" placeholder="例: 25" inputmode="numeric" style="margin-top:0">
+    </div>
+    <div class="setup-step" data-step="2">
+      <div class="setup-title" data-i18n="wizard.t2">使っていい上限額を決めよう 💰</div>
+      <div class="setup-desc" data-i18n="wizard.d2">次の給料日までに使っていい金額を、支払い方法ごとに入力してください。空欄でもOK（あとで「記録」ページから設定できます）。</div>
+      <div class="budget-grid">
+        <label style="color: var(--cash)" data-i18n="pay.現金">💵 現金</label><input type="text" id="setup-budget-現金" data-i18n-ph="budget.ph1" placeholder="例: 20000" inputmode="numeric">
+        <label style="color: var(--qr)" data-i18n="pay.QR決済">📱 QR決済</label><input type="text" id="setup-budget-QR決済" data-i18n-ph="budget.ph2" placeholder="例: 15000" inputmode="numeric">
+        <label style="color: var(--card-pay)" data-i18n="pay.カード">💳 カード</label><input type="text" id="setup-budget-カード" data-i18n-ph="budget.ph2" placeholder="例: 15000" inputmode="numeric">
+      </div>
+    </div>
+    <div class="setup-nav">
+      <button class="setup-back" id="setup-back" style="display:none" data-i18n="wizard.back">戻る</button>
+      <button class="add-btn setup-next" id="setup-next" data-i18n="wizard.next">次へ</button>
+    </div>
+    <div class="setup-dots" id="setup-dots"><span class="on"></span><span></span><span></span></div>
+  </div>
+</div>
+
+<!-- ===== 下部タブバー ===== -->
+<nav class="tabbar">
+  <button class="tab-btn active" data-view="home"><span class="tab-icon">🏠</span><span data-i18n="tab.home">ホーム</span></button>
+  <button class="tab-btn" data-view="record"><span class="tab-icon">✏️</span><span data-i18n="tab.record">記録</span></button>
+  <button class="tab-btn" data-view="settings"><span class="tab-icon">⚙️</span><span data-i18n="tab.settings">設定</span></button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ===== 定数 =====
+const METHODS = ["現金", "QR決済", "カード"];
+const METHOD_COLORS = { "現金": "var(--cash)", "QR決済": "var(--qr)", "カード": "var(--card-pay)" };
+
+// ===== データ =====
+// localStorage が使えない環境（サンドボックス内プレビューなど）でも
+// メモリ上で動作するようにフォールバックする
+const memStore = {};
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return memStore[key] || null; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { memStore[key] = value; }
+}
+
+// ===== 設定（名前・給料日・プロフィール・言語・初期設定済みフラグ） =====
+const SETTINGS_KEY = "zankin-settings";
+const SETTINGS_DEFAULTS = { name: "", payday: 25, birthday: "", job: "", gender: "", lang: "ja", currency: "JPY", setupDone: false };
+function loadSettings() {
+  try {
+    const s = JSON.parse(storageGet(SETTINGS_KEY));
+    if (s && typeof s === "object") return { ...SETTINGS_DEFAULTS, ...s };
+  } catch (e) { /* 壊れたデータは初期値に戻す */ }
+  return { ...SETTINGS_DEFAULTS };
+}
+function saveSettings() { storageSet(SETTINGS_KEY, JSON.stringify(settings)); }
+let settings = loadSettings();
+
+// ===== 多言語対応（日本語 / English） =====
+// 画面の文言はすべてこの辞書から取る。HTML側は data-i18n / data-i18n-ph 属性で対応付ける
+const I18N = {
+  ja: {
+    "tab.home": "ホーム", "tab.record": "記録", "tab.settings": "設定",
+    "name.現金": "現金", "name.QR決済": "QR決済", "name.カード": "カード",
+    "pay.現金": "💵 現金", "pay.QR決済": "📱 QR決済", "pay.カード": "💳 カード",
+    "home.methods": "💳 支払い方法別の残高",
+    "donut.used": "使用済み",
+    "home.sim": "🍻 もしこれを使ったら？",
+    "sim.ph": "例: 5000",
+    "sim.empty": "金額を入れると使った後の残りが分かります",
+    "sim.ok": "残り <b>{after}</b>（1日 {perday}）→ 行けます！👍",
+    "sim.over": "予算を <b>{over}</b> オーバーします ⚠️",
+    "home.history": "📋 履歴（今の期間）",
+    "history.empty": "まだ記録がありません",
+    "history.noMemo": "（メモなし）",
+    "history.received": "受け取り",
+    "record.title": "✏️ 記録する",
+    "type.expense": "支出（使った）", "type.income": "受け取り（残高に追加）",
+    "memo.ph": "メモ（任意）例: 飲み会、立て替え回収",
+    "btn.add": "記録する",
+    "split.title": "🤝 割り勘・立て替え",
+    "split.totalPh": "合計金額", "split.peoplePh": "人数",
+    "split.empty": "合計と人数を入れてください",
+    "split.result": "1人あたり <b>{per}</b>（{n}人で割り勘）",
+    "split.mine": "自分の分だけ記録", "split.all": "全額立て替えで記録",
+    "split.note": "立て替えた分が返ってきたら「受け取り」で記録すると残高に戻ります",
+    "split.memoMine": "割り勘（{n}人）",
+    "split.memoAll": "立て替え（{n}人分・回収予定 {back}）",
+    "budget.title": "💰 予算（方法別の限度額）",
+    "budget.ph1": "例: 20000", "budget.ph2": "例: 15000",
+    "budget.current": "現在: ",
+    "btn.saveBudget": "予算を保存",
+    "budget.note": "給料日が来ると前回の予算を自動で引き継ぎます",
+    "menu.profile": "👤 プロフィール", "menu.payday": "📅 給料日", "menu.theme": "🎨 テーマ",
+    "menu.lang": "🌐 言語", "menu.reset": "🗑️ データの初期化",
+    "data.title": "🔒 データについて",
+    "data.desc": "記録はこの端末のブラウザ内にのみ保存されます。サーバーには送信されません。給料日ごとに自動で新しい記録に切り替わります。",
+    "back": "‹ 設定に戻る",
+    "btn.save": "保存",
+    "profile.title": "👤 プロフィール",
+    "profile.name": "名前", "profile.namePh": "例: 残金太郎",
+    "profile.birthday": "生年月日", "profile.job": "職業", "profile.gender": "性別",
+    "opt.select": "選択してください",
+    "job.highschool": "高校生", "job.student": "大学生・専門学生", "job.worker": "社会人",
+    "job.parttime": "フリーター・パート", "job.other": "その他",
+    "gender.male": "男性", "gender.female": "女性", "gender.other": "その他", "gender.na": "回答しない",
+    "payday.title": "📅 給料日",
+    "payday.desc": "残高は「給料日から次の給料日まで」の期間で計算します。31日など月によって存在しない日は、その月の末日として扱います。",
+    "payday.ph": "例: 25",
+    "theme.title": "🎨 テーマ", "theme.light": "☀️ ライト", "theme.dark": "🌙 ダーク",
+    "lang.title": "🌐 言語",
+    "reset.title": "🗑️ データの初期化",
+    "reset.desc": "予算・記録・プロフィールなど、このアプリのすべてのデータを削除して最初からやり直します。この操作は元に戻せません。",
+    "reset.btn": "全データを削除",
+    "reset.confirm": "本当にすべてのデータを削除しますか？この操作は元に戻せません。",
+    "menu.currency": "💱 通貨", "menu.backup": "💾 バックアップ", "menu.about": "ℹ️ このアプリについて",
+    "currency.title": "💱 通貨",
+    "currency.desc": "金額の前に付く通貨記号を選べます（表示が変わるだけで、金額はそのままです）。",
+    "cur.JPY": "日本円", "cur.USD": "米ドル", "cur.EUR": "ユーロ", "cur.GBP": "英ポンド",
+    "cur.KRW": "韓国ウォン", "cur.CNY": "人民元", "cur.TWD": "台湾ドル", "cur.INR": "インドルピー",
+    "cur.THB": "タイバーツ", "cur.VND": "ベトナムドン", "cur.PHP": "フィリピンペソ", "cur.IDR": "インドネシアルピア",
+    "cur.AUD": "豪ドル", "cur.CAD": "カナダドル", "cur.CHF": "スイスフラン", "cur.BRL": "ブラジルレアル",
+    "backup.title": "💾 バックアップ",
+    "backup.desc": "データをファイルに書き出して保存できます。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。",
+    "backup.export": "データを書き出す",
+    "backup.importDesc": "書き出したファイルを読み込むと、今のデータがその内容に置き換わります。",
+    "backup.import": "ファイルを読み込む",
+    "toast.importFail": "読み込めないファイルです",
+    "about.title": "ℹ️ このアプリについて",
+    "about.version": "バージョン",
+    "about.desc": "ZANKIN（ザンキン）は「次の給料日まであといくら使えるか」を即答する家計アプリです。記録の細かさより、いま使えるお金がすぐ分かることを大事にしています。データはすべてこの端末の中だけに保存されます。",
+    "val.notSet": "未設定", "val.payday": "毎月{d}日", "val.light": "ライト", "val.dark": "ダーク",
+    "greeting": "こんにちは、{name}さん",
+    "label.untilPayday": "次の給料日（{date}）まで使えるお金",
+    "label.budgetInfo": "予算 {b}　|　使用 {s}",
+    "label.budgetEmpty": "「記録」ページの予算欄から入力してください",
+    "label.perDay": "給料日まであと{days}日 → 1日 <b>{amt}</b> 使えます",
+    "label.budgetOver": "予算を使い切りました 🥲 次の給料日まで踏ん張ろう",
+    "toast.amount": "金額を入力してください",
+    "toast.recorded": "記録しました ✅", "toast.income": "残高に追加しました ✅",
+    "toast.split": "合計と人数を入力してください",
+    "toast.splitMine": "自分の分 {per} を記録 ✅",
+    "toast.splitAll": "全額 {total} を記録 ✅ 回収したら「受け取り」で追加",
+    "toast.budgetInput": "予算額を入力してください", "toast.budgetSaved": "予算を保存しました ✅",
+    "toast.saved": "保存しました ✅",
+    "toast.paydayRange": "1〜31の数字で入力してください", "toast.paydaySet": "給料日を設定しました ✅",
+    "toast.inherited": "前回の予算を引き継ぎました 🔁",
+    "toast.welcome": "ようこそ、{name}さん 🎉", "toast.setupDone": "設定が完了しました 🎉",
+    "guide.text": "💰 「次の給料日まで使っていい上限額」を決めると、あといくら使えるかが分かるようになります。",
+    "guide.btn": "予算を設定する",
+    "wizard.t0": "ようこそ ZANKIN へ 👋",
+    "wizard.d0": "「次の給料日まであといくら使えるか」を即答する家計アプリです。まず、あなたの名前を教えてください（ニックネームでOK・あとで変更できます）。",
+    "wizard.t1": "給料日はいつ？ 📅",
+    "wizard.d1": "残高は「給料日から次の給料日まで」の期間で計算します。バイト代や仕送りが入る日でもOK。31日など存在しない月では末日扱いになります。",
+    "wizard.t2": "使っていい上限額を決めよう 💰",
+    "wizard.d2": "次の給料日までに使っていい金額を、支払い方法ごとに入力してください。空欄でもOK（あとで「記録」ページから設定できます）。",
+    "wizard.back": "戻る", "wizard.next": "次へ", "wizard.start": "はじめる 🎉",
+  },
+  en: {
+    "tab.home": "Home", "tab.record": "Record", "tab.settings": "Settings",
+    "name.現金": "Cash", "name.QR決済": "QR Pay", "name.カード": "Card",
+    "pay.現金": "💵 Cash", "pay.QR決済": "📱 QR Pay", "pay.カード": "💳 Card",
+    "home.methods": "💳 Balance by payment method",
+    "donut.used": "spent",
+    "home.sim": "🍻 What if I spend this?",
+    "sim.ph": "e.g. 5000",
+    "sim.empty": "Enter an amount to see what would be left",
+    "sim.ok": "<b>{after}</b> left ({perday}/day) → You're good! 👍",
+    "sim.over": "Over budget by <b>{over}</b> ⚠️",
+    "home.history": "📋 History (this period)",
+    "history.empty": "No records yet",
+    "history.noMemo": "(no memo)",
+    "history.received": "received",
+    "record.title": "✏️ Add a record",
+    "type.expense": "Spent", "type.income": "Received (add back)",
+    "memo.ph": "Memo (optional) e.g. drinks, payback",
+    "btn.add": "Record",
+    "split.title": "🤝 Split the bill",
+    "split.totalPh": "Total", "split.peoplePh": "People",
+    "split.empty": "Enter the total and number of people",
+    "split.result": "<b>{per}</b> per person (split by {n})",
+    "split.mine": "Record my share", "split.all": "Record full amount",
+    "split.note": "When you get paid back, record it as \"Received\" to restore your balance",
+    "split.memoMine": "Split ({n} people)",
+    "split.memoAll": "Covered for {n} people (expecting {back} back)",
+    "budget.title": "💰 Budget (limit per method)",
+    "budget.ph1": "e.g. 20000", "budget.ph2": "e.g. 15000",
+    "budget.current": "Now: ",
+    "btn.saveBudget": "Save budget",
+    "budget.note": "Budgets carry over automatically on payday",
+    "menu.profile": "👤 Profile", "menu.payday": "📅 Payday", "menu.theme": "🎨 Theme",
+    "menu.lang": "🌐 Language", "menu.reset": "🗑️ Reset data",
+    "data.title": "🔒 About your data",
+    "data.desc": "Your records are stored only in this browser on this device. Nothing is sent to a server. A new period starts automatically on each payday.",
+    "back": "‹ Back to Settings",
+    "btn.save": "Save",
+    "profile.title": "👤 Profile",
+    "profile.name": "Name", "profile.namePh": "e.g. Taro Zankin",
+    "profile.birthday": "Birthday", "profile.job": "Occupation", "profile.gender": "Gender",
+    "opt.select": "Select...",
+    "job.highschool": "High school student", "job.student": "College student", "job.worker": "Full-time worker",
+    "job.parttime": "Part-time worker", "job.other": "Other",
+    "gender.male": "Male", "gender.female": "Female", "gender.other": "Other", "gender.na": "Prefer not to say",
+    "payday.title": "📅 Payday",
+    "payday.desc": "Balances are calculated per pay period (payday to payday). If the day doesn't exist in a month (e.g. the 31st), the last day of that month is used.",
+    "payday.ph": "e.g. 25",
+    "theme.title": "🎨 Theme", "theme.light": "☀️ Light", "theme.dark": "🌙 Dark",
+    "lang.title": "🌐 Language",
+    "reset.title": "🗑️ Reset data",
+    "reset.desc": "Deletes all data in this app — budgets, records, and profile — and starts over. This cannot be undone.",
+    "reset.btn": "Delete all data",
+    "reset.confirm": "Really delete all data? This cannot be undone.",
+    "menu.currency": "💱 Currency", "menu.backup": "💾 Backup", "menu.about": "ℹ️ About",
+    "currency.title": "💱 Currency",
+    "currency.desc": "Choose the symbol shown before amounts (display only — the numbers stay the same).",
+    "cur.JPY": "Japanese Yen", "cur.USD": "US Dollar", "cur.EUR": "Euro", "cur.GBP": "British Pound",
+    "cur.KRW": "Korean Won", "cur.CNY": "Chinese Yuan", "cur.TWD": "Taiwan Dollar", "cur.INR": "Indian Rupee",
+    "cur.THB": "Thai Baht", "cur.VND": "Vietnamese Dong", "cur.PHP": "Philippine Peso", "cur.IDR": "Indonesian Rupiah",
+    "cur.AUD": "Australian Dollar", "cur.CAD": "Canadian Dollar", "cur.CHF": "Swiss Franc", "cur.BRL": "Brazilian Real",
+    "backup.title": "💾 Backup",
+    "backup.desc": "Export your data to a file. Do this occasionally in case you switch devices or clear your browser data.",
+    "backup.export": "Export data",
+    "backup.importDesc": "Importing a file replaces your current data with its contents.",
+    "backup.import": "Import file",
+    "toast.importFail": "Couldn't read that file",
+    "about.title": "ℹ️ About",
+    "about.version": "Version",
+    "about.desc": "ZANKIN instantly answers \"how much can I spend until next payday?\". It focuses on knowing what you can spend right now, not detailed bookkeeping. All data stays on this device.",
+    "val.notSet": "Not set", "val.payday": "Day {d} of each month", "val.light": "Light", "val.dark": "Dark",
+    "greeting": "Hi, {name}!",
+    "label.untilPayday": "Spendable until next payday ({date})",
+    "label.budgetInfo": "Budget {b}　|　Spent {s}",
+    "label.budgetEmpty": "Set your budget on the Record page",
+    "label.perDay": "{days} days until payday → <b>{amt}</b>/day",
+    "label.budgetOver": "Budget used up 🥲 Hang in there until payday",
+    "toast.amount": "Please enter an amount",
+    "toast.recorded": "Recorded ✅", "toast.income": "Added to balance ✅",
+    "toast.split": "Enter the total and number of people",
+    "toast.splitMine": "Recorded your share: {per} ✅",
+    "toast.splitAll": "Recorded {total} ✅ Add as \"Received\" when paid back",
+    "toast.budgetInput": "Please enter a budget", "toast.budgetSaved": "Budget saved ✅",
+    "toast.saved": "Saved ✅",
+    "toast.paydayRange": "Enter a number from 1 to 31", "toast.paydaySet": "Payday saved ✅",
+    "toast.inherited": "Carried over your last budget 🔁",
+    "toast.welcome": "Welcome, {name}! 🎉", "toast.setupDone": "Setup complete 🎉",
+    "guide.text": "💰 Set a spending limit until your next payday, and ZANKIN will show how much you can still spend.",
+    "guide.btn": "Set a budget",
+    "wizard.t0": "Welcome to ZANKIN 👋",
+    "wizard.d0": "ZANKIN instantly answers \"how much can I spend until next payday?\". First, tell us your name (a nickname is fine — you can change it later).",
+    "wizard.t1": "When is your payday? 📅",
+    "wizard.d1": "Balances are calculated per pay period (payday to payday). Allowance or part-time pay dates work too. The 31st becomes the last day in shorter months.",
+    "wizard.t2": "Set your spending limit 💰",
+    "wizard.d2": "Enter how much you can spend until next payday, per payment method. You can leave these empty and set them later on the Record page.",
+    "wizard.back": "Back", "wizard.next": "Next", "wizard.start": "Let's go 🎉",
+  },
+};
+// 翻訳を取り出す。{name} のような穴埋めは vars で渡す
+function tr(key, vars) {
+  const lang = settings.lang === "en" ? "en" : "ja";
+  let s = I18N[lang][key] || I18N.ja[key] || key;
+  if (vars) for (const k in vars) s = s.split("{" + k + "}").join(vars[k]);
+  return s;
+}
+function methodLabel(m) { return tr("name." + m); }
+
+// ===== 通貨 =====
+// 名前は辞書（cur.コード）から取るので、ここはコードと記号だけ持つ
+const CURRENCIES = [
+  { code: "JPY", symbol: "¥" },
+  { code: "USD", symbol: "$" },
+  { code: "EUR", symbol: "€" },
+  { code: "GBP", symbol: "£" },
+  { code: "KRW", symbol: "₩" },
+  { code: "CNY", symbol: "元" },
+  { code: "TWD", symbol: "NT$" },
+  { code: "INR", symbol: "₹" },
+  { code: "THB", symbol: "฿" },
+  { code: "VND", symbol: "₫" },
+  { code: "PHP", symbol: "₱" },
+  { code: "IDR", symbol: "Rp" },
+  { code: "AUD", symbol: "A$" },
+  { code: "CAD", symbol: "C$" },
+  { code: "CHF", symbol: "Fr" },
+  { code: "BRL", symbol: "R$" },
+];
+// 設定値から通貨情報を引く。昔のバージョンは記号（"¥"など）で保存していたので両対応
+function currencyDef() {
+  const v = settings.currency || "JPY";
+  return CURRENCIES.find((c) => c.code === v || c.symbol === v) || CURRENCIES[0];
+}
+
+// ===== 給料日区切りの期間計算 =====
+// 「今月あといくら」ではなく「次の給料日まであといくら」で考える
+// その月に給料日が存在しない場合（2月の31日など）は末日扱いにする
+function paydayOf(year, month) {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return Math.min(settings.payday, lastDay);
+}
+// ref の時点が属する期間の開始日（＝直近の給料日）
+function periodStart(ref = new Date()) {
+  const y = ref.getFullYear(), m = ref.getMonth();
+  if (ref.getDate() >= paydayOf(y, m)) return new Date(y, m, paydayOf(y, m));
+  // まだ今月の給料日が来ていなければ、先月の給料日が期間の開始
+  return new Date(y, m - 1, paydayOf(y, m - 1));
+}
+function nextPayday() {
+  const s = periodStart();
+  return new Date(s.getFullYear(), s.getMonth() + 1, paydayOf(s.getFullYear(), s.getMonth() + 1));
+}
+function dateKey(d) {
+  return `zankin-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function periodKey() { return dateKey(periodStart()); }
+function prevPeriodKey() {
+  const s = periodStart();
+  // 期間開始日の前日は「前の期間」に属するので、その期間の開始日をキーにする
+  return dateKey(periodStart(new Date(s.getFullYear(), s.getMonth(), s.getDate() - 1)));
+}
+function daysLeftToPayday() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(1, Math.round((nextPayday() - today) / 86400000));
+}
+function loadData() {
+  try {
+    const raw = storageGet(periodKey());
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (!d.budgets) d.budgets = { "現金": 0, "QR決済": 0, "カード": 0 };
+      if (!d.expenses) d.expenses = [];
+      return d;
+    }
+    // 今期間のデータがまだない＝給料日が来た直後。前回の予算だけ引き継ぐ（履歴は引き継がない）
+    const prevRaw = storageGet(prevPeriodKey());
+    if (prevRaw) {
+      const prev = JSON.parse(prevRaw);
+      if (prev.budgets) {
+        return { budgets: { ...prev.budgets }, expenses: [], inherited: true };
+      }
+    }
+  } catch (e) { /* 壊れたデータは初期化 */ }
+  return { budgets: { "現金": 0, "QR決済": 0, "カード": 0 }, expenses: [] };
+}
+function saveData() {
+  delete data.inherited; // 一時フラグは保存しない
+  storageSet(periodKey(), JSON.stringify(data));
+}
+
+let data = loadData();
+let selectedMethod = "現金";
+let selectedType = "expense";
+
+// ===== ユーティリティ =====
+const $ = (id) => document.getElementById(id);
+function yen(n) { return currencyDef().symbol + n.toLocaleString("ja-JP"); }
+// 全角数字・カンマ入りでも読めるように正規化してから整数化
+function parseNum(str) {
+  const normalized = String(str)
+    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[,，、\s¥円]/g, "");
+  const n = parseInt(normalized, 10);
+  return isNaN(n) ? null : n;
+}
+// ===== 数字のメーターアニメーション =====
+// 前回表示した数値を覚えておき、変わったら電気メーターのようにカウントを回す
+const animState = {};
+function animateYen(el, to, key) {
+  const from = key in animState ? animState[key] : to;
+  animState[key] = to;
+  if (el._anim) cancelAnimationFrame(el._anim);
+  if (el._animEnd) clearTimeout(el._animEnd);
+  if (from === to) { el.textContent = yen(to); return; }
+  const start = performance.now();
+  const duration = 700;
+  function step(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3); // 最初は速く、最後はゆっくり止まる
+    el.textContent = yen(Math.round(from + (to - from) * eased));
+    if (t < 1) el._anim = requestAnimationFrame(step);
+  }
+  el._anim = requestAnimationFrame(step);
+  // 画面が非表示だと requestAnimationFrame は止まるため、最終値だけは必ず反映する保険
+  el._animEnd = setTimeout(() => {
+    cancelAnimationFrame(el._anim);
+    el.textContent = yen(to);
+  }, duration + 300);
+}
+function showToast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1600);
+}
+function spentByMethod(method) {
+  return data.expenses.reduce((sum, e) => {
+    if (e.method !== method) return sum;
+    return sum + (e.type === "income" ? -e.amount : e.amount);
+  }, 0);
+}
+function totalBudget() { return METHODS.reduce((s, m) => s + (data.budgets[m] || 0), 0); }
+function totalSpent() { return METHODS.reduce((s, m) => s + spentByMethod(m), 0); }
+
+// ===== 描画 =====
+function render() {
+  const budget = totalBudget();
+  const spent = totalSpent();
+  const remaining = budget - spent;
+  const ratio = budget > 0 ? remaining / budget : 0;
+  // あいさつ（名前が設定されていれば表示）
+  $("greeting").textContent = settings.name ? tr("greeting", { name: settings.name }) : "";
+
+  // 予算未設定・記録なしのとき（＝初めて開いたとき）だけガイドを表示
+  $("guide-card").style.display = budget === 0 && data.expenses.length === 0 ? "block" : "none";
+
+  const np = nextPayday();
+  $("month-label").textContent = tr("label.untilPayday", { date: `${np.getMonth() + 1}/${np.getDate()}` });
+  const remEl = $("remaining");
+  animateYen(remEl, remaining, "total");
+  remEl.className = "total-amount " + (ratio > 0.3 ? "ok" : ratio > 0.1 ? "warn" : "danger");
+  $("budget-info").textContent = budget > 0
+    ? tr("label.budgetInfo", { b: yen(budget), s: yen(spent) })
+    : tr("label.budgetEmpty");
+  $("per-day").innerHTML = budget > 0 && remaining > 0
+    ? tr("label.perDay", { days: daysLeftToPayday(), amt: yen(Math.floor(remaining / daysLeftToPayday())) })
+    : budget > 0 ? tr("label.budgetOver") : "";
+
+  // 方法別ゲージ
+  $("method-gauges").innerHTML = METHODS.map((m) => {
+    const b = data.budgets[m] || 0;
+    const s = spentByMethod(m);
+    const r = b - s;
+    const pct = b > 0 ? Math.max(0, Math.min(100, (r / b) * 100)) : 0;
+    const color = b > 0 && r / b <= 0.1 ? "var(--danger)" : b > 0 && r / b <= 0.3 ? "var(--warn)" : METHOD_COLORS[m];
+    return `
+      <div class="method-row">
+        <div class="method-head">
+          <span class="method-name" style="color:${METHOD_COLORS[m]}">${methodLabel(m)}</span>
+          <span class="method-nums"><b data-anim="m-${m}">${yen(r)}</b> / ${yen(b)}</span>
+        </div>
+        <div class="gauge"><div class="gauge-fill" style="width:${pct}%; background:${color}"></div></div>
+      </div>`;
+  }).join("");
+  // innerHTML で作り直した直後に、方法別残高の数字もメーターのように回す
+  METHODS.forEach((m) => {
+    const el = document.querySelector(`[data-anim="m-${m}"]`);
+    if (el) animateYen(el, (data.budgets[m] || 0) - spentByMethod(m), "m-" + m);
+  });
+
+  // 円グラフ（支払い方法別の使用額の内訳）
+  renderDonut();
+
+  // 履歴
+  const list = $("history-list");
+  if (data.expenses.length === 0) {
+    list.innerHTML = `<div class="empty-msg">${tr("history.empty")}</div>`;
+  } else {
+    list.innerHTML = data.expenses.slice().reverse().map((e) => `
+      <div class="history-item">
+        <div class="history-left">
+          <span class="dot" style="background:${METHOD_COLORS[e.method]}"></span>
+          <div class="history-texts">
+            <span class="history-memo">${escapeHtml(e.memo) || tr("history.noMemo")}</span>
+            <span class="history-meta">${e.date} ・ ${methodLabel(e.method)}${e.type === "income" ? " ・ " + tr("history.received") : ""}</span>
+          </div>
+        </div>
+        <div class="history-right">
+          <span class="history-amount ${e.type === "income" ? "income" : ""}">${e.type === "income" ? "+" : "−"}${yen(e.amount)}</span>
+          <button class="del-btn" data-id="${e.id}">✕</button>
+        </div>
+      </div>`).join("");
+  }
+  simulate();
+}
+// ===== 円グラフ =====
+const DONUT_COLORS = { "現金": "#34d399", "QR決済": "#60a5fa", "カード": "#f472b6" };
+function renderDonut() {
+  const spentList = METHODS.map((m) => ({ m, v: Math.max(0, spentByMethod(m)) }));
+  const total = spentList.reduce((s, x) => s + x.v, 0);
+  const wrap = $("donut-wrap");
+  if (total <= 0) { wrap.style.display = "none"; return; }
+  wrap.style.display = "flex";
+
+  // conic-gradient で円グラフを描画
+  let deg = 0;
+  const stops = [];
+  spentList.forEach(({ m, v }) => {
+    if (v <= 0) return;
+    const end = deg + (v / total) * 360;
+    stops.push(`${DONUT_COLORS[m]} ${deg}deg ${end}deg`);
+    deg = end;
+  });
+  $("donut").style.background = `conic-gradient(${stops.join(", ")})`;
+  animateYen($("donut-total"), total, "donut");
+
+  $("donut-legend").innerHTML = spentList.map(({ m, v }) => `
+    <div class="legend-row">
+      <span class="legend-dot" style="background:${DONUT_COLORS[m]}"></span>
+      <span class="legend-name">${methodLabel(m)}</span>
+      <span class="legend-val">${yen(v)}</span>
+      <span class="legend-pct">${total > 0 ? Math.round((v / total) * 100) : 0}%</span>
+    </div>`).join("");
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ===== シミュレーター =====
+function simulate() {
+  const val = parseNum($("sim-amount").value);
+  const el = $("sim-result");
+  if (!val || val <= 0) {
+    el.textContent = tr("sim.empty");
+    el.style.color = "var(--sub)";
+    return;
+  }
+  const after = totalBudget() - totalSpent() - val;
+  if (after >= 0) {
+    el.innerHTML = tr("sim.ok", { after: yen(after), perday: yen(Math.floor(after / daysLeftToPayday())) });
+    el.style.color = "var(--ok)";
+  } else {
+    el.innerHTML = tr("sim.over", { over: yen(-after) });
+    el.style.color = "var(--danger)";
+  }
+}
+$("sim-amount").addEventListener("input", simulate);
+
+// ===== 電卓 =====
+let expr = "";       // 計算式（内部表現: + - * /）
+let current = "0";   // 入力中の数値
+
+function updateDisplay() {
+  $("expr").textContent = expr.replace(/\*/g, "×").replace(/\//g, "÷").replace(/-/g, "−").replace(/\+/g, "＋");
+  $("display-value").textContent = Number(current).toLocaleString("ja-JP");
+}
+function inputDigit(d) {
+  if (current === "0" && d !== "00") current = d;
+  else if (current === "0" && d === "00") return;
+  else current += d;
+  if (current.length > 9) current = current.slice(0, 9);
+  updateDisplay();
+}
+function inputOp(op) {
+  expr += current + op;
+  current = "0";
+  updateDisplay();
+}
+function calcEval() {
+  const full = expr + current;
+  if (!/^[\d+\-*/.]+$/.test(full)) return;
+  try {
+    const result = Function(`"use strict"; return (${full});`)();
+    if (typeof result === "number" && isFinite(result)) {
+      current = String(Math.round(result));
+      expr = "";
+      updateDisplay();
+    }
+  } catch (e) { /* 不正な式は無視 */ }
+}
+document.querySelectorAll(".key").forEach((key) => {
+  key.addEventListener("click", () => {
+    const t = key.textContent;
+    if (/^\d+$/.test(t)) inputDigit(t);
+    else if (t === "＋") inputOp("+");
+    else if (t === "−") inputOp("-");
+    else if (t === "×") inputOp("*");
+    else if (t === "÷") inputOp("/");
+    else if (t === "＝") calcEval();
+    else if (t === "⌫") { current = current.length > 1 ? current.slice(0, -1) : "0"; updateDisplay(); }
+    else if (t === "C") { current = "0"; expr = ""; updateDisplay(); }
+  });
+});
+
+// ===== 種別・支払い方法の選択 =====
+document.querySelectorAll(".type-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".type-btn").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedType = btn.dataset.type;
+  });
+});
+document.querySelectorAll(".pay-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".pay-btn").forEach((b) => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedMethod = btn.dataset.method;
+  });
+});
+
+// ===== 記録 =====
+function addRecord(amount, method, type, memo) {
+  const now = new Date();
+  data.expenses.push({
+    id: Date.now() + Math.random(),
+    amount, method, type, memo,
+    date: `${now.getMonth() + 1}/${now.getDate()}`,
+  });
+  saveData();
+  render();
+}
+$("add-expense").addEventListener("click", () => {
+  calcEval(); // 式が残っていれば確定
+  const amount = parseInt(current, 10);
+  if (!amount || amount <= 0) { showToast(tr("toast.amount")); return; }
+  addRecord(amount, selectedMethod, selectedType, $("expense-memo").value.trim());
+  current = "0"; expr = ""; updateDisplay();
+  $("expense-memo").value = "";
+  showToast(selectedType === "income" ? tr("toast.income") : tr("toast.recorded"));
+});
+
+// ===== 履歴削除 =====
+$("history-list").addEventListener("click", (e) => {
+  if (e.target.classList.contains("del-btn")) {
+    const id = Number(e.target.dataset.id);
+    data.expenses = data.expenses.filter((x) => x.id !== id);
+    saveData();
+    render();
+  }
+});
+
+// ===== 割り勘 =====
+function splitCalc() {
+  const total = parseNum($("split-total").value);
+  const people = parseNum($("split-people").value);
+  if (!total || !people || total <= 0 || people <= 0) return null;
+  return { total, people, perPerson: Math.ceil(total / people) };
+}
+function renderSplit() {
+  const s = splitCalc();
+  $("split-result").innerHTML = s
+    ? tr("split.result", { per: yen(s.perPerson), n: s.people })
+    : tr("split.empty");
+}
+$("split-total").addEventListener("input", renderSplit);
+$("split-people").addEventListener("input", renderSplit);
+$("split-mine").addEventListener("click", () => {
+  const s = splitCalc();
+  if (!s) { showToast(tr("toast.split")); return; }
+  addRecord(s.perPerson, selectedMethod, "expense", tr("split.memoMine", { n: s.people }));
+  showToast(tr("toast.splitMine", { per: yen(s.perPerson) }));
+});
+$("split-all").addEventListener("click", () => {
+  const s = splitCalc();
+  if (!s) { showToast(tr("toast.split")); return; }
+  addRecord(s.total, selectedMethod, "expense", tr("split.memoAll", { n: s.people, back: yen(s.perPerson * (s.people - 1)) }));
+  showToast(tr("toast.splitAll", { total: yen(s.total) }));
+});
+
+// ===== 予算保存 =====
+$("save-budget").addEventListener("click", () => {
+  let changed = false;
+  METHODS.forEach((m) => {
+    const input = $("budget-" + m);
+    if (input.value.trim() === "") return;
+    const val = parseNum(input.value);
+    if (val !== null && val >= 0) { data.budgets[m] = val; changed = true; }
+  });
+  if (!changed) { showToast(tr("toast.budgetInput")); return; }
+  saveData();
+  METHODS.forEach((m) => { $("budget-" + m).value = ""; });
+  render();
+  updateBudgetPlaceholders();
+  showToast(tr("toast.budgetSaved"));
+});
+// 予算欄のプレースホルダーに現在の設定額を表示
+function updateBudgetPlaceholders() {
+  METHODS.forEach((m) => {
+    const input = $("budget-" + m);
+    input.placeholder = data.budgets[m] > 0
+      ? tr("budget.current") + data.budgets[m].toLocaleString()
+      : tr(m === "現金" ? "budget.ph1" : "budget.ph2");
+  });
+}
+
+// ===== ページ切り替え =====
+function switchView(name) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
+  // 設定のサブページ（set-〇〇）にいるときは「設定」タブを光らせる
+  const tab = name.startsWith("set-") ? "settings" : name;
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === tab));
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll(".tab-btn").forEach((b) => {
+  b.addEventListener("click", () => switchView(b.dataset.view));
+});
+// data-go 属性を持つボタン（設定メニューの項目・戻るボタン）はそのページへ飛ぶ
+document.querySelectorAll("[data-go]").forEach((b) => {
+  b.addEventListener("click", () => switchView(b.dataset.go));
+});
+$("guide-btn").addEventListener("click", () => switchView("record"));
+
+// ===== テーマ切り替え =====
+const THEME_KEY = "zankin-theme";
+let currentTheme = "light";
+function applyTheme(theme) {
+  currentTheme = theme;
+  document.body.classList.toggle("light", theme === "light");
+  document.querySelectorAll(".theme-btn[data-theme]").forEach((b) => b.classList.toggle("selected", b.dataset.theme === theme));
+  // スマホのステータスバー周りの色もテーマに合わせる
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", theme === "light" ? "#eef1f8" : "#0b0d14");
+  storageSet(THEME_KEY, theme);
+  updateSettingsUI();
+}
+document.querySelectorAll(".theme-btn[data-theme]").forEach((b) => {
+  b.addEventListener("click", () => applyTheme(b.dataset.theme));
+});
+
+// ===== 言語切り替え =====
+// data-i18n の付いた要素の文言と、data-i18n-ph の付いた入力欄のプレースホルダーを全部入れ替える
+function applyLang(lang) {
+  settings.lang = lang;
+  saveSettings();
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = tr(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => { el.placeholder = tr(el.dataset.i18nPh); });
+  document.querySelectorAll(".lang-btn").forEach((b) => b.classList.toggle("selected", b.dataset.lang === lang));
+  renderCurrencyOptions(); // 通貨名も言語に合わせて作り直す
+  updateSettingsUI();
+  render();
+  renderSplit();
+  updateBudgetPlaceholders();
+}
+document.querySelectorAll(".lang-btn").forEach((b) => {
+  b.addEventListener("click", () => applyLang(b.dataset.lang));
+});
+
+// ===== 設定ページ（プロフィール・給料日・初期化） =====
+// 設定メニューに現在の値を表示し、編集欄にも反映する
+function updateSettingsUI() {
+  $("menu-name").textContent = settings.name || tr("val.notSet");
+  $("menu-payday").textContent = tr("val.payday", { d: settings.payday });
+  $("menu-theme").textContent = tr(currentTheme === "light" ? "val.light" : "val.dark");
+  $("menu-lang").textContent = settings.lang === "en" ? "English" : "日本語";
+  $("menu-currency").textContent = `${currencyDef().symbol} ${currencyDef().code}`;
+  $("currency-select").value = currencyDef().code;
+  $("profile-name").value = settings.name;
+  $("profile-birthday").value = settings.birthday || "";
+  $("profile-job").value = settings.job || "";
+  $("profile-gender").value = settings.gender || "";
+  $("payday-input").value = settings.payday;
+}
+$("save-profile").addEventListener("click", () => {
+  settings.name = $("profile-name").value.trim();
+  settings.birthday = $("profile-birthday").value;
+  settings.job = $("profile-job").value;
+  settings.gender = $("profile-gender").value;
+  saveSettings();
+  updateSettingsUI();
+  render();
+  showToast(tr("toast.saved"));
+  switchView("settings");
+});
+$("save-payday").addEventListener("click", () => {
+  const pd = parseNum($("payday-input").value);
+  if (!pd || pd < 1 || pd > 31) { showToast(tr("toast.paydayRange")); return; }
+  settings.payday = pd;
+  saveSettings();
+  data = loadData(); // 期間の区切りが変わるのでデータを読み直す
+  render();
+  updateSettingsUI();
+  updateBudgetPlaceholders();
+  showToast(tr("toast.paydaySet"));
+  switchView("settings");
+});
+// 通貨: プルダウンの選択肢を作る（通貨名は言語によって変わるので applyLang からも呼ぶ）
+function renderCurrencyOptions() {
+  $("currency-select").innerHTML = CURRENCIES.map((c) =>
+    `<option value="${c.code}">${c.symbol}　${tr("cur." + c.code)}（${c.code}）</option>`
+  ).join("");
+  $("currency-select").value = currencyDef().code;
+}
+$("currency-select").addEventListener("change", () => {
+  settings.currency = $("currency-select").value;
+  saveSettings();
+  updateSettingsUI();
+  render();
+  renderSplit();
+  updateBudgetPlaceholders();
+  showToast(tr("toast.saved"));
+});
+// バックアップ: このアプリの保存データをまとめてJSONファイルに書き出す
+$("backup-export").addEventListener("click", () => {
+  const dump = { app: "zankin", exportedAt: new Date().toISOString(), data: {} };
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith("zankin")).forEach((k) => { dump.data[k] = localStorage.getItem(k); });
+  } catch (e) {
+    Object.keys(memStore).forEach((k) => { dump.data[k] = memStore[k]; });
+  }
+  const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "zankin-backup.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+// 読み込み: ファイルの中身を検証してから全データを置き換える
+$("backup-import").addEventListener("click", () => $("backup-file").click());
+$("backup-file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const dump = JSON.parse(reader.result);
+      if (!dump || dump.app !== "zankin" || typeof dump.data !== "object") throw new Error("invalid");
+      Object.keys(dump.data).forEach((k) => {
+        if (k.startsWith("zankin")) storageSet(k, dump.data[k]);
+      });
+      location.reload();
+    } catch (err) {
+      showToast(tr("toast.importFail"));
+    }
+  };
+  reader.readAsText(file);
+});
+// データの初期化: このアプリの保存データ（zankin-で始まるキー）をすべて消す
+$("reset-data").addEventListener("click", () => {
+  if (!confirm(tr("reset.confirm"))) return;
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith("zankin")).forEach((k) => localStorage.removeItem(k));
+  } catch (e) {
+    Object.keys(memStore).forEach((k) => delete memStore[k]);
+  }
+  location.reload();
+});
+updateSettingsUI();
+
+// ===== 初期設定ウィザード =====
+const setupSteps = document.querySelectorAll(".setup-step");
+let setupStep = 0;
+function showSetupStep(n) {
+  setupStep = n;
+  setupSteps.forEach((s) => s.classList.toggle("active", Number(s.dataset.step) === n));
+  document.querySelectorAll("#setup-dots span").forEach((d, i) => d.classList.toggle("on", i === n));
+  $("setup-back").style.display = n === 0 ? "none" : "block";
+  $("setup-next").textContent = tr(n === setupSteps.length - 1 ? "wizard.start" : "wizard.next");
+}
+$("setup-back").addEventListener("click", () => showSetupStep(setupStep - 1));
+$("setup-next").addEventListener("click", () => {
+  // 給料日のステップだけは正しい値かチェックしてから進む
+  if (setupStep === 1) {
+    const pd = parseNum($("setup-payday").value);
+    if (!pd || pd < 1 || pd > 31) { showToast(tr("toast.paydayRange")); return; }
+  }
+  if (setupStep < setupSteps.length - 1) { showSetupStep(setupStep + 1); return; }
+  // 最後のステップ → 設定を保存してアプリを開始
+  settings.name = $("setup-name").value.trim();
+  settings.payday = parseNum($("setup-payday").value);
+  settings.setupDone = true;
+  saveSettings();
+  data = loadData(); // 給料日が決まったので正しい期間のデータを読み直す
+  METHODS.forEach((m) => {
+    const v = parseNum($("setup-budget-" + m).value);
+    if (v !== null && v > 0) data.budgets[m] = v;
+  });
+  saveData();
+  $("setup-overlay").style.display = "none";
+  render();
+  updateSettingsUI();
+  updateBudgetPlaceholders();
+  showToast(settings.name ? tr("toast.welcome", { name: settings.name }) : tr("toast.setupDone"));
+});
+if (!settings.setupDone) {
+  $("setup-payday").value = "25"; // よくある給料日を最初から入れておく
+  $("setup-overlay").style.display = "flex";
+}
+
+// ===== 起動時の初期化 =====
+applyTheme(storageGet(THEME_KEY) || "light"); // 保存されたテーマを適用（初期はライト）
+applyLang(settings.lang);                     // 保存された言語で全文言を表示（render 等もこの中で実行される）
+updateDisplay();
+
+// 前回の期間から予算を引き継いだ場合は保存して知らせる
+if (data.inherited) {
+  saveData();
+  showToast(tr("toast.inherited"));
+}
+
+// ===== PWA: Service Worker 登録（オフラインでも動くようにする） =====
+// https で公開したときだけ有効。ローカルの file:// やプレビューでは何もしない
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => { /* 失敗してもアプリ自体は動く */ });
+}
+</script>
+</body>
+</html>

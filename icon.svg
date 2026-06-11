@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdfdff"/>
+      <stop offset="1" stop-color="#e2e6f4"/>
+    </linearGradient>
+    <!-- 中心から外へふわっと消える光のにじみ -->
+    <radialGradient id="glow1">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2">
+      <stop offset="0" stop-color="#f472b6" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#f472b6" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="clip">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <circle cx="420" cy="60" r="240" fill="url(#glow1)"/>
+    <circle cx="70" cy="460" r="230" fill="url(#glow2)"/>
+    <!-- アプリの円グラフと同じ3色リング（現金=緑 / QR=青 / カード=ピンク） -->
+    <!-- 円周 = 2π×120 ≈ 754。dasharray で 45% / 25% / 30% に分割 -->
+    <g transform="rotate(-90 256 256)" stroke-width="62" fill="none">
+      <circle cx="256" cy="256" r="120" stroke="#34d399" stroke-dasharray="339.3 414.7"/>
+      <circle cx="256" cy="256" r="120" stroke="#60a5fa" stroke-dasharray="188.5 565.5" stroke-dashoffset="-339.3"/>
+      <circle cx="256" cy="256" r="120" stroke="#f472b6" stroke-dasharray="226.2 527.8" stroke-dashoffset="-527.8"/>
+    </g>
+    <text x="256" y="298" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="bold" fill="#1a2033" text-anchor="middle">¥</text>
+  </g>
+</svg>
